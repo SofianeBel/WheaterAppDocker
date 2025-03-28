@@ -1,10 +1,12 @@
 # API Météo
 
-Une API simple pour obtenir des informations météorologiques pour différentes villes avec des fonctionnalités améliorées et une interface utilisateur.
+Une API simple pour obtenir des informations météorologiques pour différentes villes avec des fonctionnalités améliorées, une interface utilisateur et une intégration avec OpenWeatherMap.
 
 ## Fonctionnalités
 
 - Interface utilisateur moderne pour visualiser la météo
+- Intégration avec l'API OpenWeatherMap pour des données météo réelles
+- Mode de secours avec données simulées si aucune clé API n'est fournie
 - Plusieurs endpoints pour différentes fonctionnalités :
   - GET `/` - Interface utilisateur par défaut ou documentation API (selon l'en-tête Accept)
   - GET `/api` - Documentation de l'API
@@ -26,6 +28,7 @@ L'application inclut une interface utilisateur moderne et responsive pour visual
 - Affichage des températures, conditions, humidité et vitesse du vent
 - Liste des villes disponibles
 - Design responsive adapté aux mobiles et ordinateurs
+- Indicateur de source des données (API réelle ou données simulées)
 
 ## Installation
 
@@ -33,6 +36,13 @@ L'application inclut une interface utilisateur moderne et responsive pour visual
 
 - Python 3.10+ installé
 - Docker (optionnel, pour la conteneurisation)
+- Clé API OpenWeatherMap (optionnel, mais recommandé)
+
+### Obtenir une clé API OpenWeatherMap
+
+1. Créez un compte sur [OpenWeatherMap](https://home.openweathermap.org/users/sign_up)
+2. Une fois connecté, allez dans la section "API Keys" de votre tableau de bord
+3. Notez votre clé API pour l'utiliser avec l'application
 
 ### Configuration
 
@@ -45,6 +55,23 @@ L'application inclut une interface utilisateur moderne et responsive pour visual
 2. Installer les dépendances
    ```bash
    pip install -r requirements.txt
+   ```
+
+3. Configurer la clé API OpenWeatherMap (optionnel mais recommandé)
+   
+   **Sur Linux/Mac :**
+   ```bash
+   export OPENWEATHER_API_KEY=votre_clé_api
+   ```
+   
+   **Sur Windows (PowerShell) :**
+   ```powershell
+   $env:OPENWEATHER_API_KEY="votre_clé_api"
+   ```
+   
+   **Sur Windows (CMD) :**
+   ```cmd
+   set OPENWEATHER_API_KEY=votre_clé_api
    ```
 
 ## Exécution de l'Application
@@ -64,9 +91,14 @@ Construire l'image Docker :
 docker build -t api-meteo .
 ```
 
-Exécuter le conteneur :
+Exécuter le conteneur (sans clé API - mode données simulées) :
 ```bash
 docker run -p 5000:5000 api-meteo
+```
+
+Exécuter le conteneur avec une clé API :
+```bash
+docker run -p 5000:5000 -e OPENWEATHER_API_KEY=votre_clé_api api-meteo
 ```
 
 ## Tests
@@ -105,7 +137,8 @@ GET /api
       {"path": "/api", "method": "GET", "description": "Documentation de l'API"},
       {"path": "/weather", "method": "GET", "description": "Obtenir les données météo d'une ville", "params": ["city"]},
       {"path": "/cities", "method": "GET", "description": "Obtenir la liste des villes disponibles"}
-    ]
+    ],
+    "using_real_api": true
   },
   "timestamp": "2023-06-15T12:00:00.000000"
 }
@@ -124,14 +157,15 @@ GET /weather?city=Paris
   "status": "success",
   "data": {
     "city": "Paris",
-    "country": "France",
+    "country": "FR",
     "temperature": 15,
-    "weather": "Ensoleillé",
+    "weather": "Dégagé",
     "humidity": 70,
-    "wind_speed": 10,
+    "wind_speed": 10.8,
     "last_updated": "2023-06-15T10:00:00Z"
   },
-  "timestamp": "2023-06-15T12:00:00.000000"
+  "timestamp": "2023-06-15T12:00:00.000000",
+  "from_mock_data": false
 }
 ```
 
@@ -142,12 +176,13 @@ GET /weather?city=Paris
 GET /cities
 ```
 
-#### Réponse
+#### Réponse (avec API réelle)
 ```json
 {
   "status": "success",
   "data": {
-    "cities": ["paris", "london", "new york", "tokyo"]
+    "cities": ["paris", "london", "new york", "tokyo"],
+    "message": "Vous pouvez rechercher n'importe quelle ville dans le monde grâce à l'API OpenWeatherMap"
   },
   "timestamp": "2023-06-15T12:00:00.000000"
 }
@@ -168,7 +203,7 @@ GET /cities
 {
   "error": "Données météo pour <city> non trouvées",
   "status": "error",
-  "available_cities": ["paris", "london", "new york", "tokyo"]
+  "available_cities": []
 }
 ```
 
@@ -189,14 +224,17 @@ Le projet inclut un workflow GitHub Actions pour :
 
 Pour configurer le déploiement vers Docker Hub, ajoutez vos identifiants Docker Hub (`DOCKERHUB_USERNAME` et `DOCKERHUB_TOKEN`) aux secrets du dépôt GitHub.
 
+## Fonctionnement en Mode Dégradé
+
+Si aucune clé API OpenWeatherMap n'est fournie (ou si l'API est indisponible), l'application utilise automatiquement des données simulées pour les villes prédéfinies (Paris, Londres, New York, Tokyo). Cela garantit que l'application reste fonctionnelle même sans connexion à l'API externe.
+
 ## Améliorations Futures
 
-- Se connecter à une vraie API météo comme OpenWeatherMap
 - Ajouter un cache pour les réponses de l'API afin de réduire les appels API externes
-- Implémenter une limitation de débit
+- Implémenter une limitation de débit pour respecter les limites de l'API gratuite
 - Ajouter une authentification pour l'accès à l'API
 - Ajouter le support des données météorologiques historiques
-- Support des prévisions météorologiques
+- Support des prévisions météorologiques sur plusieurs jours
 - Implémenter une journalisation d'erreurs plus détaillée
 - Ajouter une documentation Swagger/OpenAPI
 - Ajouter un mode sombre à l'interface utilisateur

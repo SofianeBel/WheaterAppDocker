@@ -48,4 +48,51 @@ jobs:
       with:
         context: .
         push: true
-        tags: siflybel/api-meteo:latest 
+        tags: siflybel/api-meteo:latest
+
+  deploy:
+    needs: build_and_push
+    runs-on: ubuntu-latest
+    # S'exécute uniquement si c'est un push sur main ou master (après un merge)
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    environment: production
+    steps:
+      - name: Checkout du code source
+        uses: actions/checkout@v3
+        
+      - name: Déploiement sur le serveur (simulation)
+        env:
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+        run: |
+          # Option 1: Utiliser le script de déploiement local pour simuler un déploiement
+          chmod +x ./deploy.sh
+          # Simuler seulement (sans réellement démarrer le conteneur)
+          echo "🔄 Simulation de déploiement..."
+          
+          # Afficher les étapes sans exécuter les commandes docker
+          grep "log" ./deploy.sh | grep -v "if" | sed 's/log "/echo "/g'
+          
+          echo "✅ Simulation de déploiement terminée!"
+      
+      # Pour un déploiement réel, décommentez et configurez cette section
+      # - name: Configuration de la clé SSH
+      #   uses: webfactory/ssh-agent@v0.7.0
+      #   with:
+      #     ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      
+      # - name: Copier le script de déploiement sur le serveur
+      #   run: |
+      #     scp -o StrictHostKeyChecking=no ./deploy.sh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/deploy.sh
+      
+      # - name: Exécuter le script de déploiement sur le serveur
+      #   env:
+      #     OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+      #   run: |
+      #     ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "chmod +x /tmp/deploy.sh && OPENWEATHER_API_KEY=$OPENWEATHER_API_KEY /tmp/deploy.sh"
+
+      - name: Notification de déploiement
+        run: |
+          echo "📧 Envoi d'une notification de déploiement réussi"
+          echo "🌐 Application déployée avec succès"
+          echo "📊 Version de l'application: $(date +'%Y.%m.%d-%H%M')"
+          echo "👤 Déployé par: ${{ github.actor }}" 

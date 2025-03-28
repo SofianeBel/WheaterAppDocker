@@ -117,6 +117,36 @@
             text-align: center;
             margin-top: 10px;
         }
+        .api-info {
+            text-align: center;
+            font-size: 12px;
+            color: #7f8c8d;
+            padding: 15px 0 5px;
+            border-top: 1px solid #eee;
+            margin-top: 20px;
+        }
+        .api-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        .api-badge.real {
+            background-color: #27ae60;
+            color: white;
+        }
+        .api-badge.mock {
+            background-color: #f39c12;
+            color: white;
+        }
+        .data-source {
+            display: none;
+            text-align: center;
+            font-size: 12px;
+            margin-top: 5px;
+            color: #7f8c8d;
+        }
         @media (max-width: 600px) {
             .details {
                 flex-direction: column;
@@ -158,11 +188,21 @@
             </div>
             
             <div id="lastUpdated" class="last-updated"></div>
+            <div id="dataSource" class="data-source"></div>
         </div>
         
         <div class="cities">
             <h3>Villes disponibles</h3>
             <div id="citiesList" class="cities-list"></div>
+        </div>
+        
+        <div class="api-info">
+            Source des données : 
+            {% if use_real_api %}
+            <span class="api-badge real">OpenWeatherMap API</span>
+            {% else %}
+            <span class="api-badge mock">Données simulées</span>
+            {% endif %}
         </div>
     </div>
 
@@ -197,6 +237,17 @@
                             };
                             citiesList.appendChild(cityBtn);
                         });
+                        
+                        // Afficher le message supplémentaire si présent
+                        if (data.data.message) {
+                            const messageDiv = document.createElement('div');
+                            messageDiv.style.width = '100%';
+                            messageDiv.style.textAlign = 'center';
+                            messageDiv.style.marginTop = '15px';
+                            messageDiv.style.fontSize = '14px';
+                            messageDiv.textContent = data.data.message;
+                            citiesList.appendChild(messageDiv);
+                        }
                     }
                 })
                 .catch(error => {
@@ -216,7 +267,7 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'success') {
-                        showWeather(data.data);
+                        showWeather(data.data, data.from_mock_data);
                     } else {
                         showError(data.error || 'Erreur lors de la récupération des données météo');
                     }
@@ -227,13 +278,23 @@
                 });
         }
         
-        function showWeather(weatherData) {
+        function showWeather(weatherData, fromMockData) {
             document.getElementById('cityName').textContent = weatherData.city;
             document.getElementById('temperature').textContent = `${weatherData.temperature}°C`;
             document.getElementById('weatherCondition').textContent = weatherData.weather;
             document.getElementById('humidity').textContent = `${weatherData.humidity}%`;
             document.getElementById('windSpeed').textContent = `${weatherData.wind_speed} km/h`;
             document.getElementById('country').textContent = weatherData.country;
+            
+            // Afficher la source des données
+            const dataSource = document.getElementById('dataSource');
+            if (fromMockData) {
+                dataSource.textContent = "Source: Données simulées";
+                dataSource.style.display = 'block';
+            } else {
+                dataSource.textContent = "Source: OpenWeatherMap API";
+                dataSource.style.display = 'block';
+            }
             
             // Formater la date de dernière mise à jour
             const lastUpdated = new Date(weatherData.last_updated);
@@ -243,16 +304,18 @@
             // Choisir icône en fonction de la condition météo
             let icon = '🌤️';
             const weather = weatherData.weather.toLowerCase();
-            if (weather.includes('ensoleillé') || weather.includes('clair')) {
+            if (weather.includes('ensoleillé') || weather.includes('clair') || weather.includes('dégagé')) {
                 icon = '☀️';
-            } else if (weather.includes('nuageux')) {
+            } else if (weather.includes('nuageux') || weather.includes('couvert')) {
                 icon = '☁️';
-            } else if (weather.includes('pluie') || weather.includes('pluvieux')) {
+            } else if (weather.includes('pluie') || weather.includes('pluvieux') || weather.includes('bruine')) {
                 icon = '🌧️';
-            } else if (weather.includes('neige')) {
+            } else if (weather.includes('neige') || weather.includes('neigeux')) {
                 icon = '❄️';
-            } else if (weather.includes('orage')) {
+            } else if (weather.includes('orage') || weather.includes('orageux')) {
                 icon = '⛈️';
+            } else if (weather.includes('brume') || weather.includes('brouillard')) {
+                icon = '🌫️';
             }
             document.getElementById('weatherIcon').textContent = icon;
             
