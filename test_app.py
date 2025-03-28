@@ -7,6 +7,34 @@ def client():
     with app.test_client() as client:
         yield client
 
+def test_index_endpoint_html(client):
+    """Teste si le point de terminaison racine renvoie l'interface HTML par défaut"""
+    response = client.get('/')
+    
+    assert response.status_code == 200
+    assert b'<!DOCTYPE html>' in response.data
+    assert b'temps' in response.data  # Vérifier un texte simple sans accents
+
+def test_index_endpoint_json(client):
+    """Teste si le point de terminaison racine renvoie la documentation API en JSON"""
+    response = client.get('/', headers={'Accept': 'application/json'})
+    json_data = response.get_json()
+    
+    assert response.status_code == 200
+    assert json_data['status'] == 'success'
+    assert 'name' in json_data['data']
+    assert 'endpoints' in json_data['data']
+
+def test_api_endpoint(client):
+    """Teste si le point de terminaison API renvoie la documentation"""
+    response = client.get('/api')
+    json_data = response.get_json()
+    
+    assert response.status_code == 200
+    assert json_data['status'] == 'success'
+    assert 'name' in json_data['data']
+    assert 'endpoints' in json_data['data']
+
 def test_weather_endpoint_success(client):
     """Teste si le point de terminaison météo renvoie des données pour une ville valide"""
     response = client.get('/weather?city=Paris')
@@ -47,15 +75,4 @@ def test_cities_endpoint(client):
     assert json_data['status'] == 'success'
     assert 'cities' in json_data['data']
     assert isinstance(json_data['data']['cities'], list)
-    assert len(json_data['data']['cities']) > 0
-
-def test_index_endpoint(client):
-    """Teste si le point de terminaison index renvoie la documentation de l'API"""
-    response = client.get('/')
-    json_data = response.get_json()
-    
-    assert response.status_code == 200
-    assert json_data['status'] == 'success'
-    assert 'name' in json_data['data']
-    assert 'version' in json_data['data']
-    assert 'endpoints' in json_data['data'] 
+    assert len(json_data['data']['cities']) > 0 

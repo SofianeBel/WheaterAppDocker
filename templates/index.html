@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Météo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .search-box {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px 0 0 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 0 4px 4px 0;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .weather-card {
+            text-align: center;
+            padding: 20px;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            margin: 20px 0;
+            display: none;
+        }
+        .error {
+            color: #e74c3c;
+            text-align: center;
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #fadbd8;
+            border-radius: 5px;
+            display: none;
+        }
+        .weather-icon {
+            font-size: 64px;
+            margin: 10px 0;
+        }
+        .temperature {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .details {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+        .detail {
+            text-align: center;
+        }
+        .detail-value {
+            font-weight: bold;
+            font-size: 18px;
+            margin-top: 5px;
+        }
+        .cities {
+            margin-top: 30px;
+        }
+        .cities h3 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+        .cities-list {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+        .city-btn {
+            background-color: #f1f1f1;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .city-btn:hover {
+            background-color: #ddd;
+        }
+        .last-updated {
+            font-size: 12px;
+            color: #7f8c8d;
+            text-align: center;
+            margin-top: 10px;
+        }
+        @media (max-width: 600px) {
+            .details {
+                flex-direction: column;
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Météo en temps réel</h1>
+        
+        <div class="search-box">
+            <input type="text" id="cityInput" placeholder="Entrez une ville..." />
+            <button onclick="getWeather()">Rechercher</button>
+        </div>
+        
+        <div id="errorMessage" class="error"></div>
+        
+        <div id="weatherDisplay" class="weather-card">
+            <h2 id="cityName"></h2>
+            <div id="weatherIcon" class="weather-icon">🌤️</div>
+            <div id="temperature" class="temperature">--°C</div>
+            <div id="weatherCondition"></div>
+            
+            <div class="details">
+                <div class="detail">
+                    <div>Humidité</div>
+                    <div id="humidity" class="detail-value">--%</div>
+                </div>
+                <div class="detail">
+                    <div>Vent</div>
+                    <div id="windSpeed" class="detail-value">-- km/h</div>
+                </div>
+                <div class="detail">
+                    <div>Pays</div>
+                    <div id="country" class="detail-value">--</div>
+                </div>
+            </div>
+            
+            <div id="lastUpdated" class="last-updated"></div>
+        </div>
+        
+        <div class="cities">
+            <h3>Villes disponibles</h3>
+            <div id="citiesList" class="cities-list"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Charger la liste des villes au démarrage
+            getCities();
+            
+            // Permettre la recherche en appuyant sur Entrée
+            document.getElementById('cityInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    getWeather();
+                }
+            });
+        });
+
+        function getCities() {
+            fetch('/cities')
+                .then(response => response.json())
+                .then(data => {
+                    const citiesList = document.getElementById('citiesList');
+                    citiesList.innerHTML = '';
+                    
+                    if (data.status === 'success' && data.data.cities) {
+                        data.data.cities.forEach(city => {
+                            const cityBtn = document.createElement('button');
+                            cityBtn.className = 'city-btn';
+                            cityBtn.textContent = city.charAt(0).toUpperCase() + city.slice(1);
+                            cityBtn.onclick = function() {
+                                document.getElementById('cityInput').value = this.textContent;
+                                getWeather();
+                            };
+                            citiesList.appendChild(cityBtn);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur lors du chargement des villes:', error);
+                    showError('Impossible de charger la liste des villes');
+                });
+        }
+
+        function getWeather() {
+            const city = document.getElementById('cityInput').value.trim();
+            if (!city) {
+                showError('Veuillez entrer un nom de ville');
+                return;
+            }
+            
+            fetch(`/weather?city=${encodeURIComponent(city)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showWeather(data.data);
+                    } else {
+                        showError(data.error || 'Erreur lors de la récupération des données météo');
+                    }
+                })
+                .catch(error => {
+                    showError('Erreur de connexion au serveur');
+                    console.error('Erreur:', error);
+                });
+        }
+        
+        function showWeather(weatherData) {
+            document.getElementById('cityName').textContent = weatherData.city;
+            document.getElementById('temperature').textContent = `${weatherData.temperature}°C`;
+            document.getElementById('weatherCondition').textContent = weatherData.weather;
+            document.getElementById('humidity').textContent = `${weatherData.humidity}%`;
+            document.getElementById('windSpeed').textContent = `${weatherData.wind_speed} km/h`;
+            document.getElementById('country').textContent = weatherData.country;
+            
+            // Formater la date de dernière mise à jour
+            const lastUpdated = new Date(weatherData.last_updated);
+            document.getElementById('lastUpdated').textContent = 
+                `Dernière mise à jour: ${lastUpdated.toLocaleDateString()} ${lastUpdated.toLocaleTimeString()}`;
+            
+            // Choisir icône en fonction de la condition météo
+            let icon = '🌤️';
+            const weather = weatherData.weather.toLowerCase();
+            if (weather.includes('ensoleillé') || weather.includes('clair')) {
+                icon = '☀️';
+            } else if (weather.includes('nuageux')) {
+                icon = '☁️';
+            } else if (weather.includes('pluie') || weather.includes('pluvieux')) {
+                icon = '🌧️';
+            } else if (weather.includes('neige')) {
+                icon = '❄️';
+            } else if (weather.includes('orage')) {
+                icon = '⛈️';
+            }
+            document.getElementById('weatherIcon').textContent = icon;
+            
+            document.getElementById('weatherDisplay').style.display = 'block';
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+        
+        function showError(message) {
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('errorMessage').style.display = 'block';
+            document.getElementById('weatherDisplay').style.display = 'none';
+        }
+    </script>
+</body>
+</html> 

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import os
 import json
 import logging
@@ -54,6 +54,48 @@ WEATHER_DATA = {
 def get_current_utc_time():
     return datetime.now(timezone.utc).isoformat()
 
+@app.route('/', methods=['GET'])
+def index():
+    """Point de terminaison racine - Interface utilisateur ou documentation API"""
+    # Vérifier si la requête est pour l'API JSON
+    if request.headers.get('Accept') == 'application/json':
+        return jsonify({
+            "status": "success",
+            "data": {
+                "name": "API Météo",
+                "version": "1.0.0",
+                "description": "Une API simple pour obtenir des informations météorologiques pour différentes villes",
+                "endpoints": [
+                    {"path": "/", "method": "GET", "description": "Documentation de l'API ou interface utilisateur"},
+                    {"path": "/api", "method": "GET", "description": "Documentation de l'API"},
+                    {"path": "/weather", "method": "GET", "description": "Obtenir les données météo d'une ville", "params": ["city"]},
+                    {"path": "/cities", "method": "GET", "description": "Obtenir la liste des villes disponibles"}
+                ]
+            },
+            "timestamp": get_current_utc_time()
+        })
+    # Par défaut, renvoyer l'interface utilisateur
+    return render_template('index.html')
+
+@app.route('/api', methods=['GET'])
+def api_docs():
+    """Documentation de l'API"""
+    return jsonify({
+        "status": "success",
+        "data": {
+            "name": "API Météo",
+            "version": "1.0.0",
+            "description": "Une API simple pour obtenir des informations météorologiques pour différentes villes",
+            "endpoints": [
+                {"path": "/", "method": "GET", "description": "Documentation de l'API ou interface utilisateur"},
+                {"path": "/api", "method": "GET", "description": "Documentation de l'API"},
+                {"path": "/weather", "method": "GET", "description": "Obtenir les données météo d'une ville", "params": ["city"]},
+                {"path": "/cities", "method": "GET", "description": "Obtenir la liste des villes disponibles"}
+            ]
+        },
+        "timestamp": get_current_utc_time()
+    })
+
 @app.route('/weather', methods=['GET'])
 def get_weather():
     try:
@@ -90,24 +132,6 @@ def get_cities():
         "status": "success",
         "data": {
             "cities": list(WEATHER_DATA.keys())
-        },
-        "timestamp": get_current_utc_time()
-    })
-
-@app.route('/', methods=['GET'])
-def index():
-    """Point de terminaison de documentation de l'API"""
-    return jsonify({
-        "status": "success",
-        "data": {
-            "name": "API Météo",
-            "version": "1.0.0",
-            "description": "Une API simple pour obtenir des informations météorologiques pour différentes villes",
-            "endpoints": [
-                {"path": "/", "method": "GET", "description": "Documentation de l'API"},
-                {"path": "/weather", "method": "GET", "description": "Obtenir les données météo d'une ville", "params": ["city"]},
-                {"path": "/cities", "method": "GET", "description": "Obtenir la liste des villes disponibles"}
-            ]
         },
         "timestamp": get_current_utc_time()
     })
