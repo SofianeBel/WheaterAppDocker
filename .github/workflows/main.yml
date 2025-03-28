@@ -38,15 +38,14 @@ jobs:
         tags: api-meteo:latest
         outputs: type=docker,dest=/tmp/api-meteo.tar
     
-    # Décommentez ce qui suit pour pousser vers Docker Hub
-    # - name: Connexion à Docker Hub
-    #   uses: docker/login-action@v2
-    #   with:
-    #     username: ${{ secrets.DOCKERHUB_USERNAME }}
-    #     password: ${{ secrets.DOCKERHUB_TOKEN }}
-    # - name: Pousser vers Docker Hub
-    #   uses: docker/build-push-action@v4
-    #   with:
-    #     context: .
-    #     push: true
-    #     tags: votreutilisateur/api-meteo:latest 
+    - name: Connexion à Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    - name: Pousser vers Docker Hub
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: true
+        tags: votreutilisateur/api-meteo:latest 

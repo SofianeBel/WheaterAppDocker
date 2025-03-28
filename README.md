@@ -166,8 +166,7 @@ GET /cities
 Le projet inclut un workflow GitHub Actions pour :
 1. Exécuter les tests à chaque push et pull request
 2. Construire et exporter une image Docker
-
-Pour activer l'envoi vers Docker Hub, décommentez les sections correspondantes dans `.github/workflows/main.yml` et ajoutez vos identifiants Docker Hub aux secrets du dépôt.
+3. Pousser l'image Docker vers Docker Hub
 
 ## Améliorations Futures
 
