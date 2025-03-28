@@ -48,4 +48,4 @@ jobs:
       with:
         context: .
         push: true
-        tags: votreutilisateur/api-meteo:latest 
+        tags: siflybel/api-meteo:latest 
