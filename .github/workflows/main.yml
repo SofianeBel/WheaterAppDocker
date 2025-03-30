@@ -24,6 +24,15 @@ jobs:
     - name: Scanner les secrets
       run: |
         gitleaks detect --source . --verbose --report-format json --report-path leak_report.json
+    - name: Afficher le contenu du rapport
+      if: always()
+      run: |
+        echo "Contenu du rapport de fuites :"
+        if [ -s leak_report.json ]; then
+          cat leak_report.json
+        else
+          echo "Le fichier leak_report.json est vide ou n'existe pas."
+        fi
     - name: Vérifier les résultats
       run: |
         if [ -s leak_report.json ]; then
