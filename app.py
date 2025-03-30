@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 import re
 import unicodedata
 
+# Test SUCCESS
+
 # Charger les variables d'environnement depuis .env si disponible
 try:
     from dotenv import load_dotenv
