@@ -21,8 +21,7 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Clé API OpenWeatherMap - À remplacer par votre propre clé
-# IMPORTANT: En production, utilisez des variables d'environnement ou un fichier de configuration sécurisé
+
 OPENWEATHER_API_KEY = os.environ.get('OPENWEATHER_API_KEY', '')
 USE_MOCK_DATA = not OPENWEATHER_API_KEY  # Utiliser des données mockées si pas de clé API
 
