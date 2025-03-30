@@ -20,7 +20,7 @@ def test_index_endpoint_json(client):
     response = client.get('/', headers={'Accept': 'application/json'})
     json_data = response.get_json()
     
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert json_data['status'] == 'success'
     assert 'name' in json_data['data']
     assert 'endpoints' in json_data['data']
