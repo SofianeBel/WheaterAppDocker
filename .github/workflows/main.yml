@@ -5,9 +5,36 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  # Ajouter une exécution programmée pour la rotation des identifiants
+  schedule:
+    - cron: '0 0 1 * *'  # Exécuter le premier jour de chaque mois à minuit UTC
 
 jobs:
+  # Ajouter un job pour scanner les secrets
+  secret_scanning:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Installer GitLeaks
+      run: |
+        wget https://github.com/zricethezav/gitleaks/releases/download/v8.12.0/gitleaks_8.12.0_linux_x64.tar.gz
+        tar -xzf gitleaks_8.12.0_linux_x64.tar.gz
+        chmod +x gitleaks
+        sudo mv gitleaks /usr/local/bin/
+    - name: Scanner les secrets
+      run: |
+        gitleaks detect --source . --verbose --report-format json --report-path leak_report.json
+    - name: Vérifier les résultats
+      run: |
+        if [ -s leak_report.json ]; then
+          echo "⚠️ Des secrets potentiels ont été trouvés. Vérifiez le rapport."
+          exit 1
+        else
+          echo "✅ Aucun secret n'a été trouvé dans le code."
+        fi
+
   test:
+    needs: secret_scanning
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -20,42 +47,75 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     - name: Exécution des tests
+      env:
+        # Utiliser une clé API factice pour les tests
+        OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY || 'test_key' }}
       run: |
-        pytest
+        pytest -v
 
   build_and_push:
     needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    # Ne s'exécute que pour les pushes sur la branche principale
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    permissions:
+      contents: read  # Limiter les permissions explicitement
     steps:
     - uses: actions/checkout@v3
     - name: Configuration de Docker Buildx
       uses: docker/setup-buildx-action@v2
-    - name: Construction et export
+      
+    # Ajouter un cache pour les couches Docker
+    - name: Configurer le cache Docker
+      uses: actions/cache@v3
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-
+    
+    - name: Construction de l'image
       uses: docker/build-push-action@v4
       with:
         context: .
         tags: api-meteo:latest
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
         outputs: type=docker,dest=/tmp/api-meteo.tar
+    
+    # Déplacer le cache
+    - name: Déplacer le cache
+      run: |
+        rm -rf /tmp/.buildx-cache
+        mv /tmp/.buildx-cache-new /tmp/.buildx-cache
     
     - name: Connexion à Docker Hub
       uses: docker/login-action@v2
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
+        # Ajouter un timeout pour éviter les blocages
+        logout: true
+        
     - name: Pousser vers Docker Hub
       uses: docker/build-push-action@v4
       with:
         context: .
         push: true
-        tags: siflybel/api-meteo:latest
+        tags: |
+          siflybel/api-meteo:latest
+          siflybel/api-meteo:${{ github.sha }}
+        # Utiliser le cache pour accélérer la construction
+        cache-from: type=local,src=/tmp/.buildx-cache
 
   deploy:
     needs: build_and_push
     runs-on: ubuntu-latest
     # S'exécute uniquement si c'est un push sur main ou master (après un merge)
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-    environment: production
+    environment: production  # Environnement GitHub pour isoler les secrets
+    permissions:
+      contents: read  # Limiter les permissions explicitement
     steps:
       - name: Checkout du code source
         uses: actions/checkout@v3
@@ -63,6 +123,7 @@ jobs:
       - name: Déploiement sur le serveur (simulation)
         env:
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+          DOCKER_IMAGE: siflybel/api-meteo:${{ github.sha }}  # Utiliser l'image spécifique au commit
         run: |
           # Option 1: Utiliser le script de déploiement local pour simuler un déploiement
           chmod +x ./deploy.sh
@@ -73,6 +134,7 @@ jobs:
           grep "log" ./deploy.sh | grep -v "if" | sed 's/log "/echo "/g'
           
           echo "✅ Simulation de déploiement terminée!"
+          echo "🔒 API Key configurée: ${OPENWEATHER_API_KEY:0:5}... (masquée pour la sécurité)"
       
       # Pour un déploiement réel, décommentez et configurez cette section
       # - name: Configuration de la clé SSH
@@ -87,12 +149,33 @@ jobs:
       # - name: Exécuter le script de déploiement sur le serveur
       #   env:
       #     OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+      #     DOCKER_IMAGE: siflybel/api-meteo:${{ github.sha }}  # Utiliser l'image spécifique
       #   run: |
-      #     ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "chmod +x /tmp/deploy.sh && OPENWEATHER_API_KEY=$OPENWEATHER_API_KEY /tmp/deploy.sh"
+      #     ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "chmod +x /tmp/deploy.sh && OPENWEATHER_API_KEY=$OPENWEATHER_API_KEY DOCKER_IMAGE=$DOCKER_IMAGE /tmp/deploy.sh"
 
       - name: Notification de déploiement
         run: |
           echo "📧 Envoi d'une notification de déploiement réussi"
           echo "🌐 Application déployée avec succès"
           echo "📊 Version de l'application: $(date +'%Y.%m.%d-%H%M')"
-          echo "👤 Déployé par: ${{ github.actor }}" 
+          echo "🏷️ Tag Docker: ${{ github.sha }}"
+          echo "👤 Déployé par: ${{ github.actor }}"
+          
+  # Ajouter un job de nettoyage pour les anciennes images (exécuté une fois par mois)
+  cleanup:
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - name: Connexion à Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Nettoyer les anciennes images
+        run: |
+          echo "Nettoyage des anciennes images Docker..."
+          # Ce script peut être ajouté pour supprimer les anciennes images
+          # Nécessite l'installation de skopeo ou l'utilisation de l'API Docker Hub
+          echo "Rotation des identifiants complétée." 

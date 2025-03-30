@@ -4,6 +4,8 @@ import json
 import logging
 import requests
 from datetime import datetime, timezone
+import re
+import unicodedata
 
 # Charger les variables d'environnement depuis .env si disponible
 try:
@@ -93,38 +95,99 @@ WEATHER_TRANSLATIONS = {
 def get_current_utc_time():
     return datetime.now(timezone.utc).isoformat()
 
+# Fonction pour normaliser les noms de ville (supprimer les accents, mettre en minuscules, etc.)
+def normalize_city_name(city_name):
+    if not city_name:
+        return ""
+    # Supprimer les accents
+    normalized = unicodedata.normalize('NFKD', city_name).encode('ASCII', 'ignore').decode('utf-8')
+    # Mettre en minuscules et supprimer les espaces superflus
+    normalized = normalized.lower().strip()
+    # Remplacer les tirets et underscores par des espaces
+    normalized = re.sub(r'[-_]+', ' ', normalized)
+    # Supprimer les caractères non alphanumériques (sauf espaces)
+    normalized = re.sub(r'[^\w\s]', '', normalized)
+    # Supprimer les espaces multiples
+    normalized = re.sub(r'\s+', ' ', normalized)
+    return normalized
+
+# Dictionnaire de correspondances pour les variantes de noms de villes
+CITY_NAME_VARIATIONS = {
+    "londre": "london",
+    "londra": "london",
+    "londres": "london",
+    "nueva york": "new york",
+    "newyork": "new york",
+    "ny": "new york",
+    "paris": "paris",
+    "parigi": "paris",
+    "tokyo": "tokyo"
+}
+
 # Fonction pour obtenir les données météo depuis OpenWeatherMap
 def get_weather_from_api(city):
     try:
-        logger.info(f"Requête à l'API OpenWeatherMap pour la ville : {city}")
-        url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_API_KEY}&units=metric&lang=fr"
-        response = requests.get(url)
+        normalized_city = normalize_city_name(city)
         
-        if response.status_code != 200:
-            logger.warning(f"Erreur API OpenWeatherMap: {response.status_code} - {response.text}")
-            return None
+        # Vérifier si c'est une variante de nom connue
+        if normalized_city in CITY_NAME_VARIATIONS:
+            normalized_city = CITY_NAME_VARIATIONS[normalized_city]
             
-        data = response.json()
+        logger.info(f"Requête à l'API OpenWeatherMap pour la ville : {normalized_city}")
         
-        # Traduire la condition météo principale
-        weather_main = data['weather'][0]['main']
-        weather_description = WEATHER_TRANSLATIONS.get(weather_main, data['weather'][0]['description'].capitalize())
+        # Implementation d'un mécanisme de circuit breaker simple
+        max_retries = 2
+        retry_count = 0
         
-        weather_data = {
-            "city": data['name'],
-            "country": data['sys']['country'],
-            "temperature": round(data['main']['temp']),
-            "weather": weather_description,
-            "humidity": data['main']['humidity'],
-            "wind_speed": round(data['wind']['speed'] * 3.6, 1),  # Conversion de m/s à km/h
-            "last_updated": get_current_utc_time()
-        }
+        while retry_count < max_retries:
+            try:
+                url = f"https://api.openweathermap.org/data/2.5/weather?q={normalized_city}&appid={OPENWEATHER_API_KEY}&units=metric&lang=fr"
+                response = requests.get(url, timeout=5)  # Ajouter un timeout
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # Traduire la condition météo principale
+                    weather_main = data['weather'][0]['main']
+                    weather_description = WEATHER_TRANSLATIONS.get(weather_main, data['weather'][0]['description'].capitalize())
+                    
+                    weather_data = {
+                        "city": data['name'],
+                        "country": data['sys']['country'],
+                        "temperature": round(data['main']['temp']),
+                        "weather": weather_description,
+                        "humidity": data['main']['humidity'],
+                        "wind_speed": round(data['wind']['speed'] * 3.6, 1),  # Conversion de m/s à km/h
+                        "last_updated": get_current_utc_time(),
+                        "city_id": data['id']  # Stocker l'ID de la ville pour les futures requêtes
+                    }
+                    
+                    logger.info(f"Données météo obtenues avec succès pour {city}")
+                    return weather_data
+                elif response.status_code == 401:
+                    logger.error(f"Erreur d'authentification API: {response.status_code} - {response.text}")
+                    # Ne pas réessayer pour les erreurs d'authentification
+                    return None
+                elif response.status_code == 404:
+                    logger.warning(f"Ville non trouvée: {response.status_code} - {response.text}")
+                    # Ne pas réessayer pour les villes non trouvées
+                    return None
+                else:
+                    logger.warning(f"Erreur API OpenWeatherMap: {response.status_code} - {response.text}")
+                    retry_count += 1
+                    
+            except requests.exceptions.Timeout:
+                logger.warning(f"Timeout lors de la requête à l'API pour {normalized_city}. Essai {retry_count+1}/{max_retries}")
+                retry_count += 1
+            except requests.exceptions.ConnectionError:
+                logger.warning(f"Erreur de connexion lors de la requête à l'API pour {normalized_city}. Essai {retry_count+1}/{max_retries}")
+                retry_count += 1
         
-        logger.info(f"Données météo obtenues avec succès pour {city}")
-        return weather_data
-        
+        logger.error(f"Échec après {max_retries} tentatives pour {normalized_city}")
+        return None
+                
     except Exception as e:
-        logger.error(f"Erreur lors de la requête à l'API OpenWeatherMap: {str(e)}")
+        logger.error(f"Erreur inattendue lors de la requête à l'API OpenWeatherMap: {str(e)}")
         return None
 
 @app.route('/', methods=['GET'])
@@ -174,9 +237,9 @@ def api_docs():
 @app.route('/weather', methods=['GET'])
 def get_weather():
     try:
-        city = request.args.get('city', '').lower()
+        city = request.args.get('city', '')
         
-        logger.info(f"Requête météo reçue pour la ville : {city}")
+        logger.info(f"Requête météo reçue pour la ville : {city} (normalisé: {normalize_city_name(city)})")
         
         if not city:
             logger.warning("Paramètre de ville manquant dans la requête")
@@ -189,27 +252,34 @@ def get_weather():
         
         # Si nous n'avons pas de données réelles, utilisons les données mockées si disponibles
         if weather_data is None:
-            if city in MOCK_WEATHER_DATA:
-                weather_data = MOCK_WEATHER_DATA[city]
-                logger.info(f"Utilisation des données mockées pour {city}")
+            normalized_city = normalize_city_name(city)
+            
+            # Vérifier si c'est une variante de nom connue
+            if normalized_city in CITY_NAME_VARIATIONS:
+                normalized_city = CITY_NAME_VARIATIONS[normalized_city]
+            
+            if normalized_city in MOCK_WEATHER_DATA:
+                weather_data = MOCK_WEATHER_DATA[normalized_city]
+                logger.info(f"Utilisation des données mockées pour {normalized_city}")
             else:
                 logger.warning(f"Données météo pour la ville '{city}' non trouvées")
                 return jsonify({
                     "error": f"Données météo pour {city} non trouvées", 
                     "status": "error",
+                    "suggestions": list(CITY_NAME_VARIATIONS.keys()),
                     "available_cities": list(MOCK_WEATHER_DATA.keys()) if USE_MOCK_DATA else []
                 }), 404
         
-        logger.info(f"Renvoi des données météo pour {city}")
+        logger.info(f"Renvoi des données météo pour {normalize_city_name(city)}")
         return jsonify({
             "status": "success",
             "data": weather_data,
             "timestamp": get_current_utc_time(),
-            "from_mock_data": USE_MOCK_DATA or weather_data == MOCK_WEATHER_DATA.get(city.lower())
+            "from_mock_data": USE_MOCK_DATA or weather_data == MOCK_WEATHER_DATA.get(normalize_city_name(city))
         })
     except Exception as e:
         logger.error(f"Erreur lors du traitement de la requête : {str(e)}")
-        return jsonify({"error": "Erreur interne du serveur", "status": "error"}), 500
+        return jsonify({"error": "Erreur interne du serveur", "status": "error", "details": str(e)}), 500
 
 @app.route('/cities', methods=['GET'])
 def get_cities():
